@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Roadmap (Single File)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { height: 100%; }
+    .grid-bg {
+      background-image: linear-gradient(to right, rgba(60,60,60,.07) 1px, transparent 1px),
+                        linear-gradient(to bottom, rgba(60,60,60,.07) 1px, transparent 1px);
+      background-size: 12px 12px;
+    }
+    .card { width: 260px; }
+    .no-select { user-select: none; }
+    .shadow-subtle { box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+    .status-dot {
+      position: absolute; left: -8px; top: -8px; width: 20px; height: 20px;
+      border-radius: 9999px; display: flex; align-items: center; justify-content: center; border-width: 2px;
+    }
+  </style>
+  <!-- interact.js (drag/snap/autoScroll) -->
+  <script src="https://cdn.jsdelivr.net/npm/@interactjs/interactjs/index.min.js"></script>
+  <!-- html2canvas + jsPDF for export -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+</head>
+<body class="bg-slate-50">
+  <div id="app" class="h-full flex flex-col">
+    <!-- Toolbar -->
+    <div class="flex items-center gap-2 p-2 bg-white border-b border-slate-200 sticky top-0 z-30">
+      <div class="font-semibold text-slate-700">Roadmap</div>
+      <div class="flex-1"></div>
+      <button id="toggleGrid" class="px-2 py-1 text-sm border rounded">Hide grid</button>
+      <div class="flex items-center gap-1">
+        <span class="text-sm text-slate-600">Zoom</span>
+        <button class="px-2 py-1 text-sm border rounded" onclick="setZoom(0.5)">50%</button>
+        <button class="px-2 py-1 text-sm border rounded" onclick="setZoom(0.75)">75%</button>
+        <button class="px-2 py-1 text-sm border rounded" onclick="setZoom(1)">100%</button>
+        <button class="px-2 py-1 text-sm border rounded" onclick="setZoom(1.25)">125%</button>
+        <button class="px-2 py-1 text-sm border rounded" onclick="setZoom(1.5)">150%</button>
+        <button class="px-2 py-1 text-sm border rounded" onclick="fitWidth()">Fit</button>
+      </div>
+      <button class="px-2 py-1 text-sm border rounded" onclick="exportJSON()">Export JSON</button>
+      <label class="px-2 py-1 text-sm border rounded bg-white">
+        Import JSON<input id="importFile" type="file" accept="application/json" class="hidden" />
+      </label>
+      <button class="px-2 py-1 text-sm border rounded" onclick="exportPNG()">Export PNG</button>
+      <button class="px-2 py-1 text-sm border rounded" onclick="exportPDF()">Export PDF</button>
+      <button class="px-2 py-1 text-sm border rounded" onclick="addLane()">+ Lane</button>
+    </div>
+
+    <!-- Groups Manager -->
+    <div class="p-2 border-b border-slate-200 bg-white">
+      <div class="font-medium text-slate-700 mb-2">Groups</div>
+      <div class="flex items-center gap-2 mb-2">
+        <input id="groupName" placeholder="Group name" class="px-2 py-1 border rounded text-sm"/>
+        <select id="groupBorder" class="px-2 py-1 border rounded text-sm">
+          <option>blue-600</option><option>blue-700</option>
+          <option>green-600</option><option>green-700</option>
+          <option>slate-600</option><option>slate-700</option>
+        </select>
+        <button class="px-2 py-1 text-sm border rounded" onclick="createGroup()">+ Add group</button>
+      </div>
+      <div id="groupsList" class="flex flex-wrap gap-3"></div>
+    </div>
+
+    <!-- Board container -->
+    <div id="viewport" class="p-3 overflow-auto h-[calc(100vh-120px)]">
+      <div id="boardScale" class="origin-top-left">
+        <div id="board"></div>
+      </div>
+    </div>
+
+    <!-- Mobile floating button -->
+    <div class="fixed bottom-4 right-4 md:hidden flex flex-col gap-2">
+      <button class="px-3 py-2 rounded-full shadow-subtle bg-white border" onclick="quickAdd()">+ Card</button>
+    </div>
+  </div>
+
+<script>
+// ---- Data & persistence ----
+const DEFAULT = {
+  version: 1,
+  columns: [
+    { id: 'now', name: 'Now', sections: ['Done', 'This sprint'] },
+    { id: 'next', name: 'Next', sections: ['Next sprint'] },
+    { id: 'later', name: 'Later', sections: [] }
+  ],
+  lanes: [
+    { id: 'lane-platform', name: 'Platform' },
+    { id: 'lane-data', name: 'Data Products' },
+    { id: 'lane-growth', name: 'Growth' }
+  ],
+  groups: [
+    { id: 'grp-customer', name: 'Customer', border: 'blue-600' },
+    { id: 'grp-internal', name: 'Internal', border: 'green-600' }
+  ],
+  cards: [
+    { id: 'c1', title: 'Provisioning service hardening', laneId: 'lane-platform', columnId: 'now', section: 'This sprint', jiraKey: 'PLAT-102', requirementState: 'green', groupId: 'grp-internal', fill: 'blue-100', border: null, notes: 'Rollout to 30% accounts; add rate limits', x: 24, y: 24 },
+    { id: 'c2', title: 'Self-serve data exports', laneId: 'lane-data', columnId: 'now', section: 'Done', jiraKey: 'DATA-301', requirementState: 'amber', groupId: 'grp-customer', fill: 'green-100', border: null, notes: 'MVP supports CSV & Parquet; auth by PAT', x: 180, y: 24 },
+    { id: 'c3', title: 'Onboarding email journey revamp', laneId: 'lane-growth', columnId: 'next', section: 'Next sprint', jiraKey: 'GROW-42', requirementState: 'red', groupId: 'grp-customer', fill: 'blue-200', border: null, notes: 'Hypothesis: 12% uplift in activation', x: 24, y: 24 }
+  ],
+  settings: { gridSize: 12, showGrid: true, zoom: 1 }
+};
+let state = load() || DEFAULT;
+function save(){ localStorage.setItem('roadmap-single', JSON.stringify(state)); }
+function load(){ try { return JSON.parse(localStorage.getItem('roadmap-single')); } catch { return null; } }
+
+// ---- Utility ----
+function el(tag, className, children){
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (children !== undefined) {
+    if (typeof children === 'string') e.textContent = children;
+    else if (Array.isArray(children)) children.forEach(c=> e.appendChild(c));
+    else e.appendChild(children);
+  }
+  return e;
+}
+function uid(prefix){ return prefix + '-' + Math.random().toString(36).slice(2,8) }
+function colorClass(prefix, color){
+  if (!color) return '';
+  const [name, shade] = color.split('-');
+  return prefix + '-' + name + '-' + shade;
+}
+
+// ---- Render ----
+const boardEl = document.getElementById('board');
+const boardScale = document.getElementById('boardScale');
+const viewport = document.getElementById('viewport');
+
+function render(){
+  // Toolbar grid toggle label
+  document.getElementById('toggleGrid').textContent = state.settings.showGrid ? 'Hide grid' : 'Show grid';
+
+  // Grid: 240 for lane label + columns of 360
+  boardEl.innerHTML = '';
+  const headerRow = el('div', 'grid', []);
+  headerRow.style.gridTemplateColumns = `240px repeat(${state.columns.length}, minmax(360px, 1fr))`;
+
+  headerRow.appendChild(el('div','')); // spacer
+  state.columns.forEach(col => {
+    const wrap = el('div', 'p-2');
+    const input = el('input', 'text-lg font-semibold bg-transparent outline-none px-2 py-1 rounded hover:bg-slate-100');
+    input.value = col.name;
+    input.oninput = ()=>{ col.name = input.value; save(); };
+    wrap.appendChild(input);
+
+    const secWrap = el('div','flex gap-2 mt-1 flex-wrap');
+    col.sections.forEach(sec => {
+      const chip = el('div','flex items-center gap-1 text-xs bg-slate-100 border border-slate-200 rounded px-2 py-0.5');
+      const sInput = el('input','bg-transparent outline-none w-28'); sInput.value = sec;
+      sInput.oninput = ()=>{ const i = col.sections.indexOf(sec); if (i>-1) { col.sections[i] = sInput.value; save(); render(); } };
+      const remove = el('button','', '×'); remove.title='Remove';
+      remove.onclick = ()=>{ col.sections = col.sections.filter(s=>s!==sec); state.cards.forEach(c=>{ if (c.columnId===col.id && c.section===sec) c.section=null; }); save(); render(); };
+      chip.appendChild(sInput); chip.appendChild(remove);
+      secWrap.appendChild(chip);
+    });
+    if (col.sections.length < 4){
+      const add = el('button','text-xs underline', '+ Add section');
+      add.onclick = ()=>{ col.sections.push('Section ' + (col.sections.length+1)); save(); render(); };
+      secWrap.appendChild(add);
+    }
+    wrap.appendChild(secWrap);
+    headerRow.appendChild(wrap);
+  });
+  boardEl.appendChild(headerRow);
+
+  const grid = el('div','grid');
+  grid.style.gridTemplateColumns = `240px repeat(${state.columns.length}, minmax(360px, 1fr))`;
+  boardEl.appendChild(grid);
+
+  state.lanes.forEach(lane => {
+    // Lane label cell
+    const label = el('div','p-2 border-t border-slate-200 bg-white sticky left-0 z-10');
+    const lInput = el('input','font-medium bg-transparent outline-none px-2 py-1 rounded hover:bg-slate-100');
+    lInput.value = lane.name;
+    lInput.oninput = ()=>{ lane.name = lInput.value; save(); };
+    label.appendChild(lInput);
+    grid.appendChild(label);
+
+    // Cells across columns
+    state.columns.forEach(col => {
+      const cell = el('div', 'border-t border-slate-200 relative ' + (state.settings.showGrid ? 'grid-bg' : ''));
+      cell.style.height = '320px';
+      cell.dataset.columnId = col.id; cell.dataset.laneId = lane.id;
+      // button add
+      const addBtn = el('button','absolute bottom-2 right-2 px-2 py-1 text-xs border rounded bg-white/80', '+ Card');
+      addBtn.onclick = (e)=>{ e.stopPropagation(); addCard(col.id, lane.id); };
+      cell.appendChild(addBtn);
+
+      // Cards in this cell
+      state.cards.filter(c => c.columnId===col.id && c.laneId===lane.id)
+        .forEach(card => cell.appendChild(renderCard(card)));
+
+      grid.appendChild(cell);
+    });
+  });
+
+  renderGroups();
+  applyZoom(); // maintain scale
+  setupDnD();
+}
+
+function renderGroups(){
+  const list = document.getElementById('groupsList');
+  list.innerHTML = '';
+  state.groups.forEach(g => {
+    const row = el('div','flex items-center gap-2');
+    const name = el('input','px-2 py-1 border rounded text-sm'); name.value = g.name;
+    name.oninput = ()=>{ g.name = name.value; save(); repaintCards(); };
+    const sel = el('select','px-2 py-1 border rounded text-sm');
+    ['blue-600','blue-700','green-600','green-700','slate-600','slate-700'].forEach(c=>{
+      const opt = el('option', '', c); opt.value = c; if (c===g.border) opt.selected=true; sel.appendChild(opt);
+    });
+    sel.onchange = ()=>{ g.border = sel.value; save(); repaintCards(); };
+    const del = el('button','text-xs text-slate-500 underline','delete');
+    del.onclick = ()=>{ state.groups = state.groups.filter(x=>x.id!==g.id); state.cards.forEach(c=>{ if (c.groupId===g.id) c.groupId=null; }); save(); render(); };
+    row.appendChild(name); row.appendChild(sel); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+function repaintCards(){
+  document.querySelectorAll('.card').forEach(cardEl => {
+    const id = cardEl.dataset.id;
+    const card = state.cards.find(c=>c.id===id);
+    if (!card) return;
+    const group = state.groups.find(g=>g.id===card.groupId);
+    const border = card.border || (group ? group.border : null) || 'slate-300';
+    cardEl.className = cardEl.className.replace(/border-\w+-\d+/g,'').trim();
+    cardEl.classList.add('border-' + border.replace('-','-'));
+  });
+}
+
+// ---- Card renderer ----
+function renderCard(card){
+  const group = state.groups.find(g=>g.id===card.groupId);
+  const border = card.border || (group ? group.border : null) || 'slate-300';
+
+  const wrap = el('div', `card absolute rounded-md border p-2 shadow-subtle bg-white`);
+  wrap.dataset.id = card.id;
+  wrap.style.left = (card.x||24) + 'px';
+  wrap.style.top = (card.y||24) + 'px';
+
+  // Apply fill and border classes (Tailwind via CDN supports dynamic classes as long as they exist in HTML; we fallback to inline bg color mapping)
+  const bg = card.fill || 'slate-100';
+  wrap.classList.add('bg-' + bg.replace('-','-'));
+  wrap.classList.add('border-' + border.replace('-','-'));
+
+  // Status dot
+  const dot = el('div','status-dot');
+  if (card.requirementState==='green'){ dot.className += ' bg-green-500 border-green-600'; dot.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-3 w-3 text-white"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>'; }
+  if (card.requirementState==='amber'){ dot.className += ' bg-amber-400 border-amber-500'; }
+  if (card.requirementState==='red'){ dot.className += ' bg-red-500 border-red-600'; }
+  wrap.appendChild(dot);
+
+  // Jira key
+  if (card.jiraKey){
+    const jira = el('div','absolute -top-2 right-2 text-[11px] bg-white/80 px-1 border rounded', card.jiraKey);
+    wrap.appendChild(jira);
+  }
+
+  // Title input
+  const title = el('input','w-full bg-transparent font-medium text-slate-800 outline-none');
+  title.value = card.title;
+  title.onblur = ()=>{ card.title = title.value; save(); };
+  title.onkeydown = (e)=>{ if (e.key==='Enter') title.blur(); if (e.key==='Escape'){ title.value = card.title; title.blur(); } };
+  wrap.appendChild(title);
+
+  const footer = el('div','mt-2 flex items-center justify-between text-xs text-slate-600');
+  footer.appendChild(el('span','', card.section || ''));
+  const editBtn = el('button','underline','Edit');
+  editBtn.onclick = ()=> openEditor(card.id);
+  footer.appendChild(editBtn);
+  wrap.appendChild(footer);
+
+  // Tooltip/notes via title attribute (hover) plus tap handler
+  if (card.notes) wrap.title = card.notes;
+
+  return wrap;
+}
+
+// ---- Editor ----
+let openCardId = null;
+function openEditor(cardId){
+  openCardId = cardId;
+  const card = state.cards.find(c=>c.id===cardId);
+  if (!card) return;
+  const modal = document.createElement('div');
+  modal.id = 'modal';
+  modal.className = 'fixed inset-0 bg-black/30 flex items-end md:items-center justify-center z-50';
+  modal.innerHTML = `
+    <div class="bg-white w-full md:w-[600px] rounded-t-2xl md:rounded-2xl shadow-subtle">
+      <div class="p-3 border-b flex items-center">
+        <div class="font-medium text-slate-700">Edit item</div>
+        <div class="flex-1"></div>
+        <button class="px-2 py-1 text-sm border rounded" onclick="closeEditor()">Close</button>
+      </div>
+      <div class="p-4 space-y-4">
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-slate-600">Title</label>
+          <input id="eTitle" class="col-span-2 px-2 py-1 border rounded" value="${card.title||''}"/>
+
+          <label class="text-sm text-slate-600">Jira ID</label>
+          <input id="eJira" class="col-span-2 px-2 py-1 border rounded" value="${card.jiraKey||''}"/>
+
+          <label class="text-sm text-slate-600">Group</label>
+          <select id="eGroup" class="col-span-2 px-2 py-1 border rounded">
+            <option value="">(none)</option>
+            ${state.groups.map(g=>`<option value="${g.id}" ${card.groupId===g.id?'selected':''}>${g.name}</option>`).join('')}
+          </select>
+
+          <label class="text-sm text-slate-600">Requirements</label>
+          <div class="col-span-2 flex gap-2">
+            ${['red','amber','green'].map(v=>`<button class="px-2 py-1 text-sm border rounded ${card.requirementState===v?'bg-slate-100':''}" onclick="setReqState('${v}')">${v}</button>`).join('')}
+          </div>
+
+          <label class="text-sm text-slate-600">Fill color</label>
+          <select id="eFill" class="col-span-2 px-2 py-1 border rounded">
+            ${['blue-100','blue-200','blue-300','green-100','green-200','green-300','slate-100','slate-200','slate-300'].map(c=>`<option ${card.fill===c?'selected':''}>${c}</option>`).join('')}
+          </select>
+
+          <label class="text-sm text-slate-600">Border override</label>
+          <select id="eBorder" class="col-span-2 px-2 py-1 border rounded">
+            <option value="">(none)</option>
+            ${['blue-500','blue-600','blue-700','green-500','green-600','green-700','slate-500','slate-600','slate-700'].map(c=>`<option ${card.border===c?'selected':''}>${c}</option>`).join('')}
+          </select>
+
+          <label class="text-sm text-slate-600">Notes (hover text)</label>
+          <textarea id="eNotes" class="col-span-2 px-2 py-1 border rounded" rows="3">${card.notes||''}</textarea>
+        </div>
+        <div class="pt-2">
+          <button class="px-3 py-1 border rounded" onclick="saveEditor()">Save</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+function closeEditor(){
+  const m = document.getElementById('modal'); if (m) m.remove();
+  openCardId = null;
+}
+function setReqState(v){
+  const card = state.cards.find(c=>c.id===openCardId);
+  if (!card) return;
+  card.requirementState = v; save();
+  document.getElementById('modal')?.remove();
+  openEditor(card.id);
+}
+function saveEditor(){
+  const card = state.cards.find(c=>c.id===openCardId);
+  if (!card) return;
+  card.title = document.getElementById('eTitle').value;
+  card.jiraKey = document.getElementById('eJira').value || null;
+  card.groupId = document.getElementById('eGroup').value || null;
+  card.fill = document.getElementById('eFill').value;
+  const b = document.getElementById('eBorder').value;
+  card.border = b ? b : null;
+  card.notes = document.getElementById('eNotes').value || null;
+  save(); render(); closeEditor();
+}
+
+// ---- Actions ----
+function addLane(name){
+  const id = uid('lane');
+  state.lanes.push({ id, name: name || `Lane ${state.lanes.length+1}` });
+  save(); render();
+}
+function addCard(columnId, laneId){
+  const id = uid('card');
+  const card = { id, title: 'New item', laneId, columnId, section: null, jiraKey: null, requirementState: 'red', groupId: null, fill: 'slate-100', border: null, notes: null, x: 24, y: 24 };
+  state.cards.push(card); save(); render();
+  openEditor(id);
+}
+function quickAdd(){
+  const lane = state.lanes[0]; if (!lane) addLane('Lane 1');
+  addCard('now', state.lanes[0].id);
+}
+function createGroup(){
+  const name = document.getElementById('groupName').value.trim();
+  const border = document.getElementById('groupBorder').value;
+  if (!name) return;
+  state.groups.push({ id: uid('grp'), name, border }); save(); render();
+  document.getElementById('groupName').value = '';
+}
+document.getElementById('toggleGrid').onclick = () => {
+  state.settings.showGrid = !state.settings.showGrid; save(); render();
+}
+
+// ---- Zoom ----
+function setZoom(z){
+  state.settings.zoom = z; save(); applyZoom();
+}
+function applyZoom(){
+  const z = state.settings.zoom || 1;
+  boardScale.style.transform = `scale(${z})`;
+}
+function fitWidth(){
+  // compute fit scale to viewport width
+  const contentWidth = boardEl.scrollWidth;
+  const available = viewport.clientWidth - 24;
+  let s = Math.min(1.5, Math.max(0.5, available / (contentWidth || 1)));
+  state.settings.zoom = s; save(); applyZoom();
+}
+
+// ---- Import/Export ----
+function exportJSON(){
+  const a = document.createElement('a');
+  const data = JSON.stringify(state, null, 2);
+  a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+  a.download = 'roadmap.json'; a.click();
+}
+document.getElementById('importFile').addEventListener('change', async (e)=>{
+  const f = e.target.files[0]; if (!f) return;
+  const text = await f.text();
+  try { const json = JSON.parse(text); state = json; save(); render(); }
+  catch(e){ alert('Invalid JSON'); }
+});
+
+async function exportPNG(){
+  const node = boardScale;
+  const canvas = await html2canvas(node, { backgroundColor: '#f8fafc', scale: 2 });
+  const dataUrl = canvas.toDataURL('image/png');
+  const a = document.createElement('a'); a.href = dataUrl; a.download = 'roadmap.png'; a.click();
+}
+async function exportPDF(){
+  const node = boardScale;
+  const canvas = await html2canvas(node, { backgroundColor: '#ffffff', scale: 2 });
+  const dataUrl = canvas.toDataURL('image/png');
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt' });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const img = new Image(); img.src = dataUrl; await new Promise(res=> img.onload = res);
+  const ratio = Math.min(pageWidth / img.width, pageHeight / img.height);
+  const w = img.width * ratio; const h = img.height * ratio;
+  const x = (pageWidth - w) / 2; const y = (pageHeight - h) / 2;
+  pdf.addImage(dataUrl, 'PNG', x, y, w, h);
+  pdf.save('roadmap.pdf');
+}
+
+// ---- DnD ----
+function setupDnD(){
+  // Make all cards draggable within their parent cell
+  interact('.card').draggable({
+    inertia: false,
+    autoScroll: true,
+    modifiers: [
+      interact.modifiers.snap({
+        targets: [ interact.snappers.grid({ x: state.settings.gridSize, y: state.settings.gridSize }) ],
+        range: Infinity
+      }),
+      interact.modifiers.restrictRect({
+        restriction: 'parent',
+        endOnly: true
+      })
+    ],
+    listeners: {
+      move (event) {
+        const target = event.target;
+        const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+        const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+        target.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
+        target.setAttribute('data-x', x);
+        target.setAttribute('data-y', y);
+      },
+      end (event) {
+        const target = event.target;
+        const id = target.dataset.id;
+        const card = state.cards.find(c=>c.id===id);
+        if (!card) return;
+        const x = Math.round(((parseFloat(target.style.left)||0) + (parseFloat(target.getAttribute('data-x'))||0)) / state.settings.gridSize) * state.settings.gridSize;
+        const y = Math.round(((parseFloat(target.style.top)||0) + (parseFloat(target.getAttribute('data-y'))||0)) / state.settings.gridSize) * state.settings.gridSize;
+        card.x = Math.max(8, x); card.y = Math.max(8, y);
+        target.style.left = card.x + 'px'; target.style.top = card.y + 'px';
+        target.style.transform = 'translate(0, 0)'; target.setAttribute('data-x', 0); target.setAttribute('data-y', 0);
+        save();
+      }
+    }
+  });
+
+  // Cells are dropzones to move across lanes/columns
+  interact('[data-column-id]').dropzone({
+    overlap: 0.1,
+    ondrop (event) {
+      const cell = event.target;
+      const col = cell.dataset.columnId;
+      const lane = cell.dataset.laneId;
+      const cardEl = event.relatedTarget;
+      const id = cardEl.dataset.id;
+      const card = state.cards.find(c=>c.id===id);
+      if (!card) return;
+      card.columnId = col; card.laneId = lane;
+      // reset relative position to where dropped
+      const rect = cell.getBoundingClientRect();
+      const dropX = event.dragEvent.clientX - rect.left + cell.scrollLeft;
+      const dropY = event.dragEvent.clientY - rect.top + cell.scrollTop;
+      card.x = Math.round((dropX - 130) / state.settings.gridSize) * state.settings.gridSize; // center card
+      card.y = Math.round((dropY - 20) / state.settings.gridSize) * state.settings.gridSize;
+      save(); render();
+    }
+  });
+}
+
+// ---- Init ----
+render();
+fitWidth();
+
+// Keyboard shortcut (desktop): N for new card in first lane × Now
+document.addEventListener('keydown', (e)=>{
+  if ((e.key||'').toLowerCase() === 'n') {
+    if (!state.lanes.length) addLane('Lane 1');
+    addCard('now', state.lanes[0].id);
+  }
+});
+</script>
+</body>
+</html>
