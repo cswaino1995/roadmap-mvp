@@ -1,522 +1,267 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Roadmap (Single File)</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    html, body { height: 100%; }
-    .grid-bg {
-      background-image: linear-gradient(to right, rgba(60,60,60,.07) 1px, transparent 1px),
-                        linear-gradient(to bottom, rgba(60,60,60,.07) 1px, transparent 1px);
-      background-size: 12px 12px;
-    }
-    .card { width: 260px; }
-    .no-select { user-select: none; }
-    .shadow-subtle { box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
-    .status-dot {
-      position: absolute; left: -8px; top: -8px; width: 20px; height: 20px;
-      border-radius: 9999px; display: flex; align-items: center; justify-content: center; border-width: 2px;
-    }
-  </style>
-  <!-- interact.js (drag/snap/autoScroll) -->
-  <script src="https://cdn.jsdelivr.net/npm/@interactjs/interactjs/index.min.js"></script>
-  <!-- html2canvas + jsPDF for export -->
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roadmap Board</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+    <style>
+        :root { --asda-green: #78BE20; --asda-dark-blue: #003A5D; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        .drag-handle { touch-action: none; cursor: grab; }
+        .dragging { cursor: grabbing; opacity: 0.8; }
+        .resize-handle { position: absolute; background: transparent; }
+        .resize-handle-n { top: -5px; left: 0; right: 0; height: 10px; cursor: ns-resize; }
+        .resize-handle-s { bottom: -5px; left: 0; right: 0; height: 10px; cursor: ns-resize; }
+        .resize-handle-e { top: 0; bottom: 0; right: -5px; width: 10px; cursor: ew-resize; }
+        .resize-handle-w { top: 0; bottom: 0; left: -5px; width: 10px; cursor: ew-resize; }
+        .resize-handle-nw { top: -5px; left: -5px; width: 12px; height: 12px; cursor: nwse-resize; }
+        .resize-handle-ne { top: -5px; right: -5px; width: 12px; height: 12px; cursor: nesw-resize; }
+        .resize-handle-sw { bottom: -5px; left: -5px; width: 12px; height: 12px; cursor: nesw-resize; }
+        .resize-handle-se { bottom: -5px; right: -5px; width: 12px; height: 12px; cursor: nwse-resize; }
+        .grid-background { background-image: linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px); background-size: 12px 12px; }
+        .focus-ring { outline: 2px solid var(--asda-green); outline-offset: 2px; }
+        input:focus, select:focus, button:focus-visible { @apply focus-ring; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a0aec0; }
+        .menu-panel { animation: fadeIn 150ms ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .toast { animation: toastIn 300ms ease-out forwards; }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'asda-green': 'var(--asda-green)',
+                        'asda-dark-blue': 'var(--asda-dark-blue)',
+                    }
+                }
+            },
+            safelist: [
+                'border-green-600', 'border-green-700', 'text-green-600', 'text-green-700',
+                'border-blue-600', 'border-blue-700', 'text-blue-600', 'text-blue-700',
+                'border-slate-600', 'border-slate-700', 'text-slate-600', 'text-slate-700'
+            ]
+        }
+    </script>
 </head>
-<body class="bg-slate-50">
-  <div id="app" class="h-full flex flex-col">
-    <!-- Toolbar -->
-    <div class="flex items-center gap-2 p-2 bg-white border-b border-slate-200 sticky top-0 z-30">
-      <div class="font-semibold text-slate-700">Roadmap</div>
-      <div class="flex-1"></div>
-      <button id="toggleGrid" class="px-2 py-1 text-sm border rounded">Hide grid</button>
-      <div class="flex items-center gap-1">
-        <span class="text-sm text-slate-600">Zoom</span>
-        <button class="px-2 py-1 text-sm border rounded" onclick="setZoom(0.5)">50%</button>
-        <button class="px-2 py-1 text-sm border rounded" onclick="setZoom(0.75)">75%</button>
-        <button class="px-2 py-1 text-sm border rounded" onclick="setZoom(1)">100%</button>
-        <button class="px-2 py-1 text-sm border rounded" onclick="setZoom(1.25)">125%</button>
-        <button class="px-2 py-1 text-sm border rounded" onclick="setZoom(1.5)">150%</button>
-        <button class="px-2 py-1 text-sm border rounded" onclick="fitWidth()">Fit</button>
-      </div>
-      <button class="px-2 py-1 text-sm border rounded" onclick="exportJSON()">Export JSON</button>
-      <label class="px-2 py-1 text-sm border rounded bg-white">
-        Import JSON<input id="importFile" type="file" accept="application/json" class="hidden" />
-      </label>
-      <button class="px-2 py-1 text-sm border rounded" onclick="exportPNG()">Export PNG</button>
-      <button class="px-2 py-1 text-sm border rounded" onclick="exportPDF()">Export PDF</button>
-      <button class="px-2 py-1 text-sm border rounded" onclick="addLane()">+ Lane</button>
+
+<body class="bg-slate-100 text-slate-800 antialiased overflow-hidden flex flex-col h-screen">
+
+    <div id="ie-banner" class="hidden bg-amber-100 text-amber-800 p-2 text-center text-sm">
+        Drag and resize features are not supported in Internet Explorer. For the best experience, please use a modern browser like Chrome or Edge.
     </div>
 
-    <!-- Groups Manager -->
-    <div class="p-2 border-b border-slate-200 bg-white">
-      <div class="font-medium text-slate-700 mb-2">Groups</div>
-      <div class="flex items-center gap-2 mb-2">
-        <input id="groupName" placeholder="Group name" class="px-2 py-1 border rounded text-sm"/>
-        <select id="groupBorder" class="px-2 py-1 border rounded text-sm">
-          <option>blue-600</option><option>blue-700</option>
-          <option>green-600</option><option>green-700</option>
-          <option>slate-600</option><option>slate-700</option>
-        </select>
-        <button class="px-2 py-1 text-sm border rounded" onclick="createGroup()">+ Add group</button>
-      </div>
-      <div id="groupsList" class="flex flex-wrap gap-3"></div>
-    </div>
-
-    <!-- Board container -->
-    <div id="viewport" class="p-3 overflow-auto h-[calc(100vh-120px)]">
-      <div id="boardScale" class="origin-top-left">
-        <div id="board"></div>
-      </div>
-    </div>
-
-    <!-- Mobile floating button -->
-    <div class="fixed bottom-4 right-4 md:hidden flex flex-col gap-2">
-      <button class="px-3 py-2 rounded-full shadow-subtle bg-white border" onclick="quickAdd()">+ Card</button>
-    </div>
-  </div>
-
-<script>
-// ---- Data & persistence ----
-const DEFAULT = {
-  version: 1,
-  columns: [
-    { id: 'now', name: 'Now', sections: ['Done', 'This sprint'] },
-    { id: 'next', name: 'Next', sections: ['Next sprint'] },
-    { id: 'later', name: 'Later', sections: [] }
-  ],
-  lanes: [
-    { id: 'lane-platform', name: 'Platform' },
-    { id: 'lane-data', name: 'Data Products' },
-    { id: 'lane-growth', name: 'Growth' }
-  ],
-  groups: [
-    { id: 'grp-customer', name: 'Customer', border: 'blue-600' },
-    { id: 'grp-internal', name: 'Internal', border: 'green-600' }
-  ],
-  cards: [
-    { id: 'c1', title: 'Provisioning service hardening', laneId: 'lane-platform', columnId: 'now', section: 'This sprint', jiraKey: 'PLAT-102', requirementState: 'green', groupId: 'grp-internal', fill: 'blue-100', border: null, notes: 'Rollout to 30% accounts; add rate limits', x: 24, y: 24 },
-    { id: 'c2', title: 'Self-serve data exports', laneId: 'lane-data', columnId: 'now', section: 'Done', jiraKey: 'DATA-301', requirementState: 'amber', groupId: 'grp-customer', fill: 'green-100', border: null, notes: 'MVP supports CSV & Parquet; auth by PAT', x: 180, y: 24 },
-    { id: 'c3', title: 'Onboarding email journey revamp', laneId: 'lane-growth', columnId: 'next', section: 'Next sprint', jiraKey: 'GROW-42', requirementState: 'red', groupId: 'grp-customer', fill: 'blue-200', border: null, notes: 'Hypothesis: 12% uplift in activation', x: 24, y: 24 }
-  ],
-  settings: { gridSize: 12, showGrid: true, zoom: 1 }
-};
-let state = load() || DEFAULT;
-function save(){ localStorage.setItem('roadmap-single', JSON.stringify(state)); }
-function load(){ try { return JSON.parse(localStorage.getItem('roadmap-single')); } catch { return null; } }
-
-// ---- Utility ----
-function el(tag, className, children){
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (children !== undefined) {
-    if (typeof children === 'string') e.textContent = children;
-    else if (Array.isArray(children)) children.forEach(c=> e.appendChild(c));
-    else e.appendChild(children);
-  }
-  return e;
-}
-function uid(prefix){ return prefix + '-' + Math.random().toString(36).slice(2,8) }
-function colorClass(prefix, color){
-  if (!color) return '';
-  const [name, shade] = color.split('-');
-  return prefix + '-' + name + '-' + shade;
-}
-
-// ---- Render ----
-const boardEl = document.getElementById('board');
-const boardScale = document.getElementById('boardScale');
-const viewport = document.getElementById('viewport');
-
-function render(){
-  // Toolbar grid toggle label
-  document.getElementById('toggleGrid').textContent = state.settings.showGrid ? 'Hide grid' : 'Show grid';
-
-  // Grid: 240 for lane label + columns of 360
-  boardEl.innerHTML = '';
-  const headerRow = el('div', 'grid', []);
-  headerRow.style.gridTemplateColumns = `240px repeat(${state.columns.length}, minmax(360px, 1fr))`;
-
-  headerRow.appendChild(el('div','')); // spacer
-  state.columns.forEach(col => {
-    const wrap = el('div', 'p-2');
-    const input = el('input', 'text-lg font-semibold bg-transparent outline-none px-2 py-1 rounded hover:bg-slate-100');
-    input.value = col.name;
-    input.oninput = ()=>{ col.name = input.value; save(); };
-    wrap.appendChild(input);
-
-    const secWrap = el('div','flex gap-2 mt-1 flex-wrap');
-    col.sections.forEach(sec => {
-      const chip = el('div','flex items-center gap-1 text-xs bg-slate-100 border border-slate-200 rounded px-2 py-0.5');
-      const sInput = el('input','bg-transparent outline-none w-28'); sInput.value = sec;
-      sInput.oninput = ()=>{ const i = col.sections.indexOf(sec); if (i>-1) { col.sections[i] = sInput.value; save(); render(); } };
-      const remove = el('button','', '×'); remove.title='Remove';
-      remove.onclick = ()=>{ col.sections = col.sections.filter(s=>s!==sec); state.cards.forEach(c=>{ if (c.columnId===col.id && c.section===sec) c.section=null; }); save(); render(); };
-      chip.appendChild(sInput); chip.appendChild(remove);
-      secWrap.appendChild(chip);
-    });
-    if (col.sections.length < 4){
-      const add = el('button','text-xs underline', '+ Add section');
-      add.onclick = ()=>{ col.sections.push('Section ' + (col.sections.length+1)); save(); render(); };
-      secWrap.appendChild(add);
-    }
-    wrap.appendChild(secWrap);
-    headerRow.appendChild(wrap);
-  });
-  boardEl.appendChild(headerRow);
-
-  const grid = el('div','grid');
-  grid.style.gridTemplateColumns = `240px repeat(${state.columns.length}, minmax(360px, 1fr))`;
-  boardEl.appendChild(grid);
-
-  state.lanes.forEach(lane => {
-    // Lane label cell
-    const label = el('div','p-2 border-t border-slate-200 bg-white sticky left-0 z-10');
-    const lInput = el('input','font-medium bg-transparent outline-none px-2 py-1 rounded hover:bg-slate-100');
-    lInput.value = lane.name;
-    lInput.oninput = ()=>{ lane.name = lInput.value; save(); };
-    label.appendChild(lInput);
-    grid.appendChild(label);
-
-    // Cells across columns
-    state.columns.forEach(col => {
-      const cell = el('div', 'border-t border-slate-200 relative ' + (state.settings.showGrid ? 'grid-bg' : ''));
-      cell.style.height = '320px';
-      cell.dataset.columnId = col.id; cell.dataset.laneId = lane.id;
-      // button add
-      const addBtn = el('button','absolute bottom-2 right-2 px-2 py-1 text-xs border rounded bg-white/80', '+ Card');
-      addBtn.onclick = (e)=>{ e.stopPropagation(); addCard(col.id, lane.id); };
-      cell.appendChild(addBtn);
-
-      // Cards in this cell
-      state.cards.filter(c => c.columnId===col.id && c.laneId===lane.id)
-        .forEach(card => cell.appendChild(renderCard(card)));
-
-      grid.appendChild(cell);
-    });
-  });
-
-  renderGroups();
-  applyZoom(); // maintain scale
-  setupDnD();
-}
-
-function renderGroups(){
-  const list = document.getElementById('groupsList');
-  list.innerHTML = '';
-  state.groups.forEach(g => {
-    const row = el('div','flex items-center gap-2');
-    const name = el('input','px-2 py-1 border rounded text-sm'); name.value = g.name;
-    name.oninput = ()=>{ g.name = name.value; save(); repaintCards(); };
-    const sel = el('select','px-2 py-1 border rounded text-sm');
-    ['blue-600','blue-700','green-600','green-700','slate-600','slate-700'].forEach(c=>{
-      const opt = el('option', '', c); opt.value = c; if (c===g.border) opt.selected=true; sel.appendChild(opt);
-    });
-    sel.onchange = ()=>{ g.border = sel.value; save(); repaintCards(); };
-    const del = el('button','text-xs text-slate-500 underline','delete');
-    del.onclick = ()=>{ state.groups = state.groups.filter(x=>x.id!==g.id); state.cards.forEach(c=>{ if (c.groupId===g.id) c.groupId=null; }); save(); render(); };
-    row.appendChild(name); row.appendChild(sel); row.appendChild(del);
-    list.appendChild(row);
-  });
-}
-
-function repaintCards(){
-  document.querySelectorAll('.card').forEach(cardEl => {
-    const id = cardEl.dataset.id;
-    const card = state.cards.find(c=>c.id===id);
-    if (!card) return;
-    const group = state.groups.find(g=>g.id===card.groupId);
-    const border = card.border || (group ? group.border : null) || 'slate-300';
-    cardEl.className = cardEl.className.replace(/border-\w+-\d+/g,'').trim();
-    cardEl.classList.add('border-' + border.replace('-','-'));
-  });
-}
-
-// ---- Card renderer ----
-function renderCard(card){
-  const group = state.groups.find(g=>g.id===card.groupId);
-  const border = card.border || (group ? group.border : null) || 'slate-300';
-
-  const wrap = el('div', `card absolute rounded-md border p-2 shadow-subtle bg-white`);
-  wrap.dataset.id = card.id;
-  wrap.style.left = (card.x||24) + 'px';
-  wrap.style.top = (card.y||24) + 'px';
-
-  // Apply fill and border classes (Tailwind via CDN supports dynamic classes as long as they exist in HTML; we fallback to inline bg color mapping)
-  const bg = card.fill || 'slate-100';
-  wrap.classList.add('bg-' + bg.replace('-','-'));
-  wrap.classList.add('border-' + border.replace('-','-'));
-
-  // Status dot
-  const dot = el('div','status-dot');
-  if (card.requirementState==='green'){ dot.className += ' bg-green-500 border-green-600'; dot.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-3 w-3 text-white"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>'; }
-  if (card.requirementState==='amber'){ dot.className += ' bg-amber-400 border-amber-500'; }
-  if (card.requirementState==='red'){ dot.className += ' bg-red-500 border-red-600'; }
-  wrap.appendChild(dot);
-
-  // Jira key
-  if (card.jiraKey){
-    const jira = el('div','absolute -top-2 right-2 text-[11px] bg-white/80 px-1 border rounded', card.jiraKey);
-    wrap.appendChild(jira);
-  }
-
-  // Title input
-  const title = el('input','w-full bg-transparent font-medium text-slate-800 outline-none');
-  title.value = card.title;
-  title.onblur = ()=>{ card.title = title.value; save(); };
-  title.onkeydown = (e)=>{ if (e.key==='Enter') title.blur(); if (e.key==='Escape'){ title.value = card.title; title.blur(); } };
-  wrap.appendChild(title);
-
-  const footer = el('div','mt-2 flex items-center justify-between text-xs text-slate-600');
-  footer.appendChild(el('span','', card.section || ''));
-  const editBtn = el('button','underline','Edit');
-  editBtn.onclick = ()=> openEditor(card.id);
-  footer.appendChild(editBtn);
-  wrap.appendChild(footer);
-
-  // Tooltip/notes via title attribute (hover) plus tap handler
-  if (card.notes) wrap.title = card.notes;
-
-  return wrap;
-}
-
-// ---- Editor ----
-let openCardId = null;
-function openEditor(cardId){
-  openCardId = cardId;
-  const card = state.cards.find(c=>c.id===cardId);
-  if (!card) return;
-  const modal = document.createElement('div');
-  modal.id = 'modal';
-  modal.className = 'fixed inset-0 bg-black/30 flex items-end md:items-center justify-center z-50';
-  modal.innerHTML = `
-    <div class="bg-white w-full md:w-[600px] rounded-t-2xl md:rounded-2xl shadow-subtle">
-      <div class="p-3 border-b flex items-center">
-        <div class="font-medium text-slate-700">Edit item</div>
-        <div class="flex-1"></div>
-        <button class="px-2 py-1 text-sm border rounded" onclick="closeEditor()">Close</button>
-      </div>
-      <div class="p-4 space-y-4">
-        <div class="grid grid-cols-3 gap-3 items-center">
-          <label class="text-sm text-slate-600">Title</label>
-          <input id="eTitle" class="col-span-2 px-2 py-1 border rounded" value="${card.title||''}"/>
-
-          <label class="text-sm text-slate-600">Jira ID</label>
-          <input id="eJira" class="col-span-2 px-2 py-1 border rounded" value="${card.jiraKey||''}"/>
-
-          <label class="text-sm text-slate-600">Group</label>
-          <select id="eGroup" class="col-span-2 px-2 py-1 border rounded">
-            <option value="">(none)</option>
-            ${state.groups.map(g=>`<option value="${g.id}" ${card.groupId===g.id?'selected':''}>${g.name}</option>`).join('')}
-          </select>
-
-          <label class="text-sm text-slate-600">Requirements</label>
-          <div class="col-span-2 flex gap-2">
-            ${['red','amber','green'].map(v=>`<button class="px-2 py-1 text-sm border rounded ${card.requirementState===v?'bg-slate-100':''}" onclick="setReqState('${v}')">${v}</button>`).join('')}
-          </div>
-
-          <label class="text-sm text-slate-600">Fill color</label>
-          <select id="eFill" class="col-span-2 px-2 py-1 border rounded">
-            ${['blue-100','blue-200','blue-300','green-100','green-200','green-300','slate-100','slate-200','slate-300'].map(c=>`<option ${card.fill===c?'selected':''}>${c}</option>`).join('')}
-          </select>
-
-          <label class="text-sm text-slate-600">Border override</label>
-          <select id="eBorder" class="col-span-2 px-2 py-1 border rounded">
-            <option value="">(none)</option>
-            ${['blue-500','blue-600','blue-700','green-500','green-600','green-700','slate-500','slate-600','slate-700'].map(c=>`<option ${card.border===c?'selected':''}>${c}</option>`).join('')}
-          </select>
-
-          <label class="text-sm text-slate-600">Notes (hover text)</label>
-          <textarea id="eNotes" class="col-span-2 px-2 py-1 border rounded" rows="3">${card.notes||''}</textarea>
+    <header class="bg-white/80 backdrop-blur-sm border-b border-slate-200 p-3 flex-shrink-0 z-30 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2">
+                <svg viewBox="0 0 24 24" class="h-6 w-6 text-asda-dark-blue" fill="currentColor"><path d="M4 4h16v2H4zm0 4h16v2H4zm0 4h10v2H4zm0 4h10v2H4z"></path></svg>
+                <span class="text-lg font-semibold text-slate-800">Roadmap</span>
+            </div>
+            <div class="relative">
+                <button id="file-menu-btn" class="menu-btn text-sm px-3 py-1 rounded-md hover:bg-slate-100">File</button>
+                <div id="file-menu-panel" class="menu-panel hidden absolute mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 right-0 py-2">
+                    <a href="#" id="export-json-btn" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Export JSON</a>
+                    <a href="#" id="import-json-btn" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Import JSON</a>
+                    <input type="file" id="json-file-input" class="hidden" accept=".json">
+                    <hr class="my-1">
+                    <a href="#" id="export-png-btn" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Export PNG</a>
+                    <a href="#" id="export-pdf-btn" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Export PDF</a>
+                </div>
+            </div>
+            <div class="relative">
+                <button id="view-menu-btn" class="menu-btn text-sm px-3 py-1 rounded-md hover:bg-slate-100">View</button>
+                <div id="view-menu-panel" class="menu-panel hidden absolute mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 right-0 py-2">
+                    <a href="#" id="toggle-grid-btn" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Toggle Grid</a>
+                    <a href="#" id="fit-center-btn" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Fit & Center</a>
+                </div>
+            </div>
+            <button id="add-lane-btn" class="text-sm px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300">+ Lane</button>
         </div>
-        <div class="pt-2">
-          <button class="px-3 py-1 border rounded" onclick="saveEditor()">Save</button>
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2">
+                <span id="zoom-value" class="text-sm font-medium text-slate-600 w-10 text-right">100%</span>
+                <input id="zoom-slider" type="range" min="50" max="150" value="100" class="w-32 h-1 accent-asda-green">
+            </div>
+            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMzguMSA1MS4zIj48cGF0aCBmaWxsPSIjNzhCRTIwIiBkPSJNMzEuMiAyNS44YzAgMi4xLS40IDQtMS4xIDUuOC0uOCA1LTMuMyA4LjQtOC40IDEwLjQtMS41LjYtMy4xLjktNC43IDEuMS0uMSAwIC41LS4xIDAtLjEgMCAwIDAtLjEgMC0uMS0xLjYtLjItMy4xLS42LTQuNy0xLjEtNS4yLTEuOS03LjYtNC45LTguNC0xMC40LS44LTEuOC0xLjEtMy43LTEuMS01LjggMC0yLjEuNC00IDEuMS01LjguOC01IDMuMy04LjQgOC40LTEwLjQgMS41LS42IDMuMS0uOSA0LjctMS4xLjEtLjEgMC0uMS4xLS4xLjEgMCAuMSAwIC4xLjEgMS42LjIgMy4xLjYgNC43IDEuMSA1LjIgMS45IDcuNiA0LjkgOC40IDEwLjQuOCAxLjcgMS4xIDMuNyAxLjEgNS44ek0yMyAxMC4yYy0xLjIgMC0yLjQuMi0zLjUuNi0zLjkgMS41LTUuNSA1LjEtNS42IDguOS0uMSAyLjkuNiA1LjMgMS44IDcuNC41LjggMS4xIDEuNSAxLjggMi4xLjIuMi41LjMuNy41LjEgMCAuMSAwIC4yLjEgMCAwIDAgMCAuMS4xLjEuMi4xLjQuMi43IDAgMCAuMSAwIC4xIDAgMCAwIDAgMCAuNS4yIDEuNS40IDIuMi40IDEuMSAwIDIuMi0uMSAzLjQtLjYgMy44LTEuNSA1LjQtNS4xIDUuNS04LjkuMS0yLjktLjYtNS4zLTEuOC03LjQtLjUtLjgtMS4xLTEuNS0xLjgtMi4xLS41LS41LTEuMS0uOS0xLjgtMS4yLTEgLjMtMi4yLjQtMy40LjR6TTEwNS43IDI4LjljLTEuMi0uOS0yLjYtMS4zLTMuOS0xLjMtMS45IDAtMy42LjgtNC43IDIuM2gtLjFWMjAuNGgtNS44djMwLjJoNS44di0xNy41YzAtMi45IDEuNy01IDQuMy01IDEuMiAwIDIuMi40IDIuOSAxLjIgMS4yIDEuMiAxLjggMi45IDEuOCA0Ljh2MTYuNWg1Ljh2LTE5Yy0uMS0zLjgtMS45LTctNC4yLTguMXpNNTEuMyA1MC42aDYuNHYtOS45YzAtMS43LS4xLTMuMi0uMi00LjEtLjEtMS4zLS4zLTIuMy0uOC0zLS40LS42LTEuMS0uOS0yLS45LTEuMiAwLTIgLjYtMi44IDEuNy0uOSAxLjItMS4zIDIuOC0xLjMgNC43djExLjVoLS4xek01MS4zIDYuOGg2LjR2MzEuNmgtNi40VjYuOHptNDAuNSA0My44aDYuNHYtOS45YzAtMS43LS4xLTMuMi0uMi00LjEtLjEtMS4zLS4zLTIuMy0uOC0zLS40LS42LTEuMS0uOS0yLS45LTEuMiAwLTIgLjYtMi44IDEuNy0uOSAxLjItMS4zIDIuOC0xLjMgNC43djExLjVoLS4xek05MS44IDYuOGg2LjR2MzEuNmgtNi40VjYuOHpNMTM4LjEgMjguOWMtMS4yLS45LTIuNi0xLjMtMy45LTEuMy0xLjkgMC0zLjYuOC00LjcgMi4zaC0uMXYtOS40aC01Ljh2MzAuMmg1Ljh2LTE3LjVjMC0yLjkgMS43LTUgNC4zLTUgMS4yIDAgMi4yLjQgMi45IDEuMiAxLjIgMS4yIDEuOCAyLjkgMS44IDQuOHYxNi41aDUuOHYtMTljMC0zLjgtMS44LTctNC4yLTguMXpNNjUuNyA1MC42aDYuNFYxOS44aC02LjR2MzAuOHpNNzguMSA1MC42aDYudjE0LjJoLTYuMnYtMTQuMnptLS4zLTMwLjNjLjktLjkgMi4xLTEuNCAzLjQtMS40czIuNS41IDMuNCAxLjQgMS40IDIuMSAxLjQgMy40LS41IDIuNS0xLjQgMy40LTEuOSAxLjQtMy40IDEuNC0yLjYtLjUtMy40LTEuNC0xLjQtMi4xLTEuNC0zLjQgMC0xLjQuNS0yLjYgMS4xLTEuN3oiLz48L3N2Zz4=" alt="ASDA Logo" class="h-8">
         </div>
-      </div>
+    </header>
+
+    <div id="groups-panel-container" class="bg-white border-b border-slate-200 flex-shrink-0 z-20 shadow-sm transition-all duration-300">
+        <div class="p-3 border-b border-slate-200 cursor-pointer flex justify-between items-center" id="groups-toggle">
+            <h3 class="font-semibold text-slate-600">Groups</h3>
+            <svg id="groups-chevron" class="h-5 w-5 text-slate-500 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+        </div>
+        <div id="groups-content" class="p-4 space-y-4">
+            <div class="flex items-center gap-2">
+                <input type="text" id="new-group-name" placeholder="New group name..." class="flex-grow text-sm border-slate-300 rounded-md shadow-sm focus:border-asda-green focus:ring-asda-green">
+                <select id="new-group-color" class="text-sm border-slate-300 rounded-md shadow-sm focus:border-asda-green focus:ring-asda-green">
+                    <option value="green-600">Green</option><option value="green-700">Dark Green</option>
+                    <option value="blue-600">Blue</option><option value="blue-700">Dark Blue</option>
+                    <option value="slate-600">Slate</option><option value="slate-700">Dark Slate</option>
+                </select>
+                <button id="add-group-btn" class="px-4 py-2 text-sm font-semibold text-white bg-asda-dark-blue rounded-md hover:bg-opacity-90">+ Add</button>
+            </div>
+            <div id="groups-list" class="space-y-2"></div>
+        </div>
     </div>
-  `;
-  document.body.appendChild(modal);
-}
-function closeEditor(){
-  const m = document.getElementById('modal'); if (m) m.remove();
-  openCardId = null;
-}
-function setReqState(v){
-  const card = state.cards.find(c=>c.id===openCardId);
-  if (!card) return;
-  card.requirementState = v; save();
-  document.getElementById('modal')?.remove();
-  openEditor(card.id);
-}
-function saveEditor(){
-  const card = state.cards.find(c=>c.id===openCardId);
-  if (!card) return;
-  card.title = document.getElementById('eTitle').value;
-  card.jiraKey = document.getElementById('eJira').value || null;
-  card.groupId = document.getElementById('eGroup').value || null;
-  card.fill = document.getElementById('eFill').value;
-  const b = document.getElementById('eBorder').value;
-  card.border = b ? b : null;
-  card.notes = document.getElementById('eNotes').value || null;
-  save(); render(); closeEditor();
-}
 
-// ---- Actions ----
-function addLane(name){
-  const id = uid('lane');
-  state.lanes.push({ id, name: name || `Lane ${state.lanes.length+1}` });
-  save(); render();
-}
-function addCard(columnId, laneId){
-  const id = uid('card');
-  const card = { id, title: 'New item', laneId, columnId, section: null, jiraKey: null, requirementState: 'red', groupId: null, fill: 'slate-100', border: null, notes: null, x: 24, y: 24 };
-  state.cards.push(card); save(); render();
-  openEditor(id);
-}
-function quickAdd(){
-  const lane = state.lanes[0]; if (!lane) addLane('Lane 1');
-  addCard('now', state.lanes[0].id);
-}
-function createGroup(){
-  const name = document.getElementById('groupName').value.trim();
-  const border = document.getElementById('groupBorder').value;
-  if (!name) return;
-  state.groups.push({ id: uid('grp'), name, border }); save(); render();
-  document.getElementById('groupName').value = '';
-}
-document.getElementById('toggleGrid').onclick = () => {
-  state.settings.showGrid = !state.settings.showGrid; save(); render();
-}
+    <main id="board-scroll-container" class="flex-grow overflow-auto relative">
+        <div id="board-canvas" class="relative transition-transform duration-150 ease-linear" style="transform-origin: 0 0;">
+            <div id="grid-bg" class="absolute inset-0"></div>
+            <div id="board-container" class="inline-block min-w-full">
+                 </div>
+        </div>
+    </main>
 
-// ---- Zoom ----
-function setZoom(z){
-  state.settings.zoom = z; save(); applyZoom();
-}
-function applyZoom(){
-  const z = state.settings.zoom || 1;
-  boardScale.style.transform = `scale(${z})`;
-}
-function fitWidth(){
-  // compute fit scale to viewport width
-  const contentWidth = boardEl.scrollWidth;
-  const available = viewport.clientWidth - 24;
-  let s = Math.min(1.5, Math.max(0.5, available / (contentWidth || 1)));
-  state.settings.zoom = s; save(); applyZoom();
-}
+    <button id="fab-add-card" class="fixed bottom-6 right-6 bg-asda-green text-white rounded-full p-4 shadow-lg z-40 md:hidden flex items-center justify-center">
+        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+    </button>
+    
+    <div id="modal-overlay" class="fixed inset-0 bg-black/50 hidden z-40 transition-opacity"></div>
+    <div id="card-editor-modal" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 hidden z-50 transition-transform scale-95 opacity-0 md:w-auto">
+        <form id="card-editor-form" class="space-y-4">
+            <input type="hidden" id="card-id-input">
+            <h2 class="text-xl font-bold text-slate-800">Edit Item</h2>
+            <div>
+                <label for="card-title-input" class="block text-sm font-medium text-slate-700">Title</label>
+                <textarea id="card-title-input" rows="2" class="mt-1 block w-full border-slate-300 rounded-md shadow-sm text-sm" required></textarea>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="card-jira-input" class="block text-sm font-medium text-slate-700">Jira ID</label>
+                    <input type="text" id="card-jira-input" class="mt-1 block w-full border-slate-300 rounded-md shadow-sm text-sm">
+                </div>
+                <div>
+                    <label for="card-group-select" class="block text-sm font-medium text-slate-700">Group</label>
+                    <select id="card-group-select" class="mt-1 block w-full border-slate-300 rounded-md shadow-sm text-sm"></select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700">Requirements State</label>
+                <div id="card-req-state-radios" class="mt-2 flex items-center gap-4">
+                    <label class="flex items-center gap-2"><input type="radio" name="req-state" value="red" class="text-red-600 focus:ring-red-500"> Red</label>
+                    <label class="flex items-center gap-2"><input type="radio" name="req-state" value="amber" class="text-amber-500 focus:ring-amber-500"> Amber</label>
+                    <label class="flex items-center gap-2"><input type="radio" name="req-state" value="green" class="text-green-600 focus:ring-green-500"> Green</label>
+                </div>
+            </div>
+             <div>
+                <label for="card-notes-input" class="block text-sm font-medium text-slate-700">Notes (for tooltip)</label>
+                <input type="text" id="card-notes-input" class="mt-1 block w-full border-slate-300 rounded-md shadow-sm text-sm">
+            </div>
+            <div class="flex justify-end gap-3 pt-4">
+                <button type="button" id="card-modal-cancel" class="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 rounded-md hover:bg-slate-200">Cancel</button>
+                <button type="submit" class="px-4 py-2 text-sm font-semibold text-white bg-asda-green rounded-md hover:bg-opacity-90">Save Changes</button>
+            </div>
+        </form>
+    </div>
 
-// ---- Import/Export ----
-function exportJSON(){
-  const a = document.createElement('a');
-  const data = JSON.stringify(state, null, 2);
-  a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
-  a.download = 'roadmap.json'; a.click();
-}
-document.getElementById('importFile').addEventListener('change', async (e)=>{
-  const f = e.target.files[0]; if (!f) return;
-  const text = await f.text();
-  try { const json = JSON.parse(text); state = json; save(); render(); }
-  catch(e){ alert('Invalid JSON'); }
-});
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2"></div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            'use strict';
 
-async function exportPNG(){
-  const node = boardScale;
-  const canvas = await html2canvas(node, { backgroundColor: '#f8fafc', scale: 2 });
-  const dataUrl = canvas.toDataURL('image/png');
-  const a = document.createElement('a'); a.href = dataUrl; a.download = 'roadmap.png'; a.click();
-}
-async function exportPDF(){
-  const node = boardScale;
-  const canvas = await html2canvas(node, { backgroundColor: '#ffffff', scale: 2 });
-  const dataUrl = canvas.toDataURL('image/png');
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt' });
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const img = new Image(); img.src = dataUrl; await new Promise(res=> img.onload = res);
-  const ratio = Math.min(pageWidth / img.width, pageHeight / img.height);
-  const w = img.width * ratio; const h = img.height * ratio;
-  const x = (pageWidth - w) / 2; const y = (pageHeight - h) / 2;
-  pdf.addImage(dataUrl, 'PNG', x, y, w, h);
-  pdf.save('roadmap.pdf');
-}
+            // --- DOM ELEMENTS ---
+            const dom = {
+                boardContainer: document.getElementById('board-container'),
+                boardCanvas: document.getElementById('board-canvas'),
+                boardScroll: document.getElementById('board-scroll-container'),
+                gridBg: document.getElementById('grid-bg'),
+                zoomSlider: document.getElementById('zoom-slider'),
+                zoomValue: document.getElementById('zoom-value'),
+                addLaneBtn: document.getElementById('add-lane-btn'),
+                groups: {
+                    container: document.getElementById('groups-panel-container'),
+                    toggle: document.getElementById('groups-toggle'),
+                    chevron: document.getElementById('groups-chevron'),
+                    content: document.getElementById('groups-content'),
+                    list: document.getElementById('groups-list'),
+                    newName: document.getElementById('new-group-name'),
+                    newColor: document.getElementById('new-group-color'),
+                    addBtn: document.getElementById('add-group-btn'),
+                },
+                modal: {
+                    overlay: document.getElementById('modal-overlay'),
+                    el: document.getElementById('card-editor-modal'),
+                    form: document.getElementById('card-editor-form'),
+                    cardId: document.getElementById('card-id-input'),
+                    title: document.getElementById('card-title-input'),
+                    jira: document.getElementById('card-jira-input'),
+                    group: document.getElementById('card-group-select'),
+                    reqStateRadios: document.getElementById('card-req-state-radios'),
+                    notes: document.getElementById('card-notes-input'),
+                    cancelBtn: document.getElementById('card-modal-cancel'),
+                },
+                menus: {
+                    fileBtn: document.getElementById('file-menu-btn'),
+                    filePanel: document.getElementById('file-menu-panel'),
+                    viewBtn: document.getElementById('view-menu-btn'),
+                    viewPanel: document.getElementById('view-menu-panel'),
+                },
+                actions: {
+                    exportJson: document.getElementById('export-json-btn'),
+                    importJson: document.getElementById('import-json-btn'),
+                    jsonInput: document.getElementById('json-file-input'),
+                    exportPng: document.getElementById('export-png-btn'),
+                    exportPdf: document.getElementById('export-pdf-btn'),
+                    toggleGrid: document.getElementById('toggle-grid-btn'),
+                    fitCenter: document.getElementById('fit-center-btn'),
+                },
+                fabAddCard: document.getElementById('fab-add-card'),
+            };
 
-// ---- DnD ----
-function setupDnD(){
-  // Make all cards draggable within their parent cell
-  interact('.card').draggable({
-    inertia: false,
-    autoScroll: true,
-    modifiers: [
-      interact.modifiers.snap({
-        targets: [ interact.snappers.grid({ x: state.settings.gridSize, y: state.settings.gridSize }) ],
-        range: Infinity
-      }),
-      interact.modifiers.restrictRect({
-        restriction: 'parent',
-        endOnly: true
-      })
-    ],
-    listeners: {
-      move (event) {
-        const target = event.target;
-        const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
-        const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
-        target.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
-        target.setAttribute('data-x', x);
-        target.setAttribute('data-y', y);
-      },
-      end (event) {
-        const target = event.target;
-        const id = target.dataset.id;
-        const card = state.cards.find(c=>c.id===id);
-        if (!card) return;
-        const x = Math.round(((parseFloat(target.style.left)||0) + (parseFloat(target.getAttribute('data-x'))||0)) / state.settings.gridSize) * state.settings.gridSize;
-        const y = Math.round(((parseFloat(target.style.top)||0) + (parseFloat(target.getAttribute('data-y'))||0)) / state.settings.gridSize) * state.settings.gridSize;
-        card.x = Math.max(8, x); card.y = Math.max(8, y);
-        target.style.left = card.x + 'px'; target.style.top = card.y + 'px';
-        target.style.transform = 'translate(0, 0)'; target.setAttribute('data-x', 0); target.setAttribute('data-y', 0);
-        save();
-      }
-    }
-  });
+            // --- STATE MANAGEMENT ---
+            const STORAGE_KEY = 'roadmap-board-v1';
+            const GRID_SIZE = 12;
 
-  // Cells are dropzones to move across lanes/columns
-  interact('[data-column-id]').dropzone({
-    overlap: 0.1,
-    ondrop (event) {
-      const cell = event.target;
-      const col = cell.dataset.columnId;
-      const lane = cell.dataset.laneId;
-      const cardEl = event.relatedTarget;
-      const id = cardEl.dataset.id;
-      const card = state.cards.find(c=>c.id===id);
-      if (!card) return;
-      card.columnId = col; card.laneId = lane;
-      // reset relative position to where dropped
-      const rect = cell.getBoundingClientRect();
-      const dropX = event.dragEvent.clientX - rect.left + cell.scrollLeft;
-      const dropY = event.dragEvent.clientY - rect.top + cell.scrollTop;
-      card.x = Math.round((dropX - 130) / state.settings.gridSize) * state.settings.gridSize; // center card
-      card.y = Math.round((dropY - 20) / state.settings.gridSize) * state.settings.gridSize;
-      save(); render();
-    }
-  });
-}
+            const defaultState = {
+                version: 1,
+                columns: [
+                    { id: 'col-now', name: 'Now', sections: ['Done', 'In Progress'] },
+                    { id: 'col-next', name: 'Next', sections: ['Next Sprint'] },
+                    { id: 'col-later', name: 'Later', sections: [] }
+                ],
+                lanes: [
+                    { id: 'lane-platform', name: 'Platform' },
+                    { id: 'lane-data', name: 'Data Products' },
+                    { id: 'lane-growth', name: 'Growth' }
+                ],
+                groups: [
+                    { id: 'grp-customer', name: 'Customer', color: 'green-700' },
+                    { id: 'grp-internal', name: 'Internal', color: 'blue-700' }
+                ],
+                cards: [
+                    { id: "c1", title: "Provisioning service hardening", laneId: "lane-platform", columnId: "col-now", section: "In Progress", jiraKey: "PLAT-102", requirementState: "green", groupId: "grp-internal", x: 24, y: 24, w: 360, h: 120, notes: "Final hardening phase before go-live." },
+                    { id: "c2", title: "Self-serve data exports via new API endpoint", laneId: "lane-data", columnId: "col-now", section: "Done", jiraKey: "DATA-301", requirementState: "green", groupId: "grp-customer", x: 420, y: 24, w: 320, h: 144 },
+                    { id: "c3", title: "New user onboarding email journey improvements", laneId: "lane-growth", columnId: "col-next", section: "Next Sprint", jiraKey: "GROW-42", requirementState: "amber", groupId: "grp-customer", x: 24, y: 24, w: 320, h: 120, notes: "" },
+                    { id: "c4", title: "Investigate new monitoring tools", laneId: "lane-platform", columnId: "col-later", section: "", jiraKey: "PLAT-115", requirementState: "red", groupId: "grp-internal", x: 24, y: 24, w: 320, h: 96, notes: "Explore options for observability." }
+                ],
+                settings: { gridSize: GRID_SIZE, showGrid: true, zoom: 1, groupsCollapsed: false }
+            };
 
-// ---- Init ----
-render();
-fitWidth();
+            let state = loadState();
 
-// Keyboard shortcut (desktop): N for new card in first lane × Now
-document.addEventListener('keydown', (e)=>{
-  if ((e.key||'').toLowerCase() === 'n') {
-    if (!state.lanes.length) addLane('Lane 1');
-    addCard('now', state.lanes[0].id);
-  }
-});
-</script>
-</body>
-</html>
+            function loadState() {
+                try {
+                    const savedState = localStorage.getItem(STORAGE_KEY);
+                    return savedState ? JSON.parse(savedState) : JSON.parse(JSON.stringify(defaultState));
+                } catch (e) {
+                    console.error("Failed to load state from localStorage", e);
+                    return JSON.parse(JSON.stringify(defaultState));
+                }
+            }
+
+            function save
